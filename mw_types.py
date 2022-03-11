@@ -11,22 +11,47 @@ class RunningText:
     """
 
     def __init__(self, text: str):
-        self.text: str = text
+        self.text: List[Any] = []
+        prev_index = 0
+        index = 0
+        while prev_index < len(text):
+            index = text.find("{", prev_index)
+            if index != -1:
+                if prev_index != index:
+                    self.text.append(text[prev_index:index])
+                prev_index = index
+                index = text.find("}", prev_index)
+                if index == -1:
+                    raise RuntimeError("Failed to find matching '}' in running text!")
+                index += 1
+                self.text.append(self.__parse_marked_up(text[prev_index:index]))
+                prev_index = index
+            else:
+                self.text.append(text[prev_index:])
+                prev_index = len(text)
+
+    def __parse_marked_up(self, text: str) -> Tuple:
+        return tuple(text.lstrip("{").rstrip("}").split("|"))
 
     def __str__(self):
-        # TODO: very incomplete support and expensive implementation
-        text = self.text.replace("{bc}", ": ")
-
-        text = re.sub(r"{sx\|([^\|]+)\|[^\|]*\|[^}]*}", r"\1", text)
-        text = re.sub(r"{dxt\|([\w ]+)(:\d+)?\|[^}]*}", r"\1", text)
-        text = re.sub(r"{a_link\|([\w ]+)}", r"\1", text)
-        text = re.sub(r"{d_link\|([\w ]+)\|[^}]*}", r"\1", text)
-
-        text = re.sub(r"{dx_def}(.*){\/dx_def}", r"(\1)", text)
-
-        # remove all other tags
-        text = re.sub(r"{\/?\w+}", "", text)
-        return text
+        result: str = ""
+        for elm in self.text:
+            if isinstance(elm, str):
+                result += elm
+            elif elm[0] == "bc":
+                result += ": "
+            elif elm[0] == "sx":
+                result += click.style(elm[1].upper(), fg="blue", underline=True)
+            elif elm[0] == "dxt":
+                result += elm[1].split(":", maxsplit=1)[0]
+            elif elm[0] in ["a_link", "d_link"]:
+                result += elm[1]
+            elif elm[0] in ["dx_def", "/dx_def"]:
+                # only needs the text in between
+                continue
+            # ignore all other tags
+            # TODO: incomplete support
+        return result
 
 
 class AuthorQuotation:
