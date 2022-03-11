@@ -1,14 +1,17 @@
-from typing import List, Dict, Optional, Tuple
-import click
+from typing import List, Dict, Optional, Tuple, Any
 import re
+import click
 
 
-# process running text
-# https://dictionaryapi.com/products/json#sec-2.tokens
-# https://dictionaryapi.com/products/json#sec-2.xrefregtokens
 class RunningText:
-    def __init__(self, text):
-        self.text = text
+    """
+    Running text contains marked up components
+    https://dictionaryapi.com/products/json#sec-2.tokens
+    https://dictionaryapi.com/products/json#sec-2.xrefregtokens
+    """
+
+    def __init__(self, text: str):
+        self.text: str = text
 
     def __str__(self):
         # TODO: very incomplete support and expensive implementation
@@ -26,9 +29,12 @@ class RunningText:
         return text
 
 
-# Attribution of Quote: aq
-# https://dictionaryapi.com/products/json#sec-2.aq
 class AuthorQuotation:
+    """
+    Attribution of Quote: aq
+    https://dictionaryapi.com/products/json#sec-2.aq
+    """
+
     def __init__(self, data: Tuple[str, Dict]):
         assert data[0] == "aq", "Not an aq node!"
 
@@ -37,24 +43,26 @@ class AuthorQuotation:
         self.aqdate: Optional[str] = None
         # TODO: self.subsource: Optional[]
 
-        for (k, v) in data[1].items():
-            if k == "auth":
-                self.auth = v
-            elif k == "source":
-                self.source = v
-            elif k == "aqdata":
-                self.aqdata = v
+        for (key, value) in data[1].items():
+            if key == "auth":
+                self.auth = value
+            elif key == "source":
+                self.source = value
+            elif key == "aqdate":
+                self.aqdate = value
             # TODO: elif k == "subsource"
 
     def __str__(self):
         # TODO: what if ends up being None?
-        l = list(filter(lambda x: x is not None, [self.auth, self.source, self.aqdate]))
-        return " ".join(l)
+        parts = list(
+            filter(lambda x: x is not None, [self.auth, self.source, self.aqdate])
+        )
+        return " ".join(parts)
 
 
-# Verbal Illustrations: vis
-# https://dictionaryapi.com/products/json#sec-2.vis
 class VerbalIllustration:
+    """A single verbal illustration"""
+
     def __init__(self, data: Dict):
         self.text = RunningText(data["t"])
         self.aq: Optional[AuthorQuotation] = None
@@ -63,18 +71,24 @@ class VerbalIllustration:
             self.aq = AuthorQuotation(("aq", data["aq"]))
 
     def __str__(self):
-        r = click.style("// ", bold=True) + click.style(self.text, italic=True)
+        line = click.style("// ", bold=True, fg="blue") + click.style(
+            self.text, italic=True, fg="blue"
+        )
         if self.aq is not None:
-            return r + " -- " + self.aq.__str__()
-        else:
-            return r
+            return line + click.style(" -- " + self.aq.__str__(), fg="magenta")
+        return line
 
 
 class VerbalIllustrationSet:
+    """
+    Verbal Illustrations: vis
+    https://dictionaryapi.com/products/json#sec-2.vis
+    """
+
     def __init__(self, data: List):
         assert data[0] == "vis", "Not a vis node!"
         assert len(data) == 2, "Malformed vis node!"
-        assert type(data[1]) is list, "Malformed vis node!"
+        assert isinstance(data[1], list), "Malformed vis node!"
 
         self.vis: List[VerbalIllustration] = []
         for elm in data[1]:
@@ -84,9 +98,12 @@ class VerbalIllustrationSet:
         return "\n".join([vi.__str__() for vi in self.vis])
 
 
-# Defining Text: dt
-# https://dictionaryapi.com/products/json#sec-2.dt
 class DefiningText:
+    """
+    Defining Text: dt
+    https://dictionaryapi.com/products/json#sec-2.dt
+    """
+
     def __init__(self, data: Tuple[str, List]):
         assert data[0] == "dt", "Not a dt node!"
 
@@ -107,39 +124,42 @@ class DefiningText:
             return self.text.__str__()
 
 
-# Format SN according to its possible parts
-# A sense number sn may contain bold Arabic numerals,
-# bold lowercase letters, or parenthesized Arabic numerals.
-
-SN_FORMAT = re.compile(r"^(?P<l1>\d+)? ?(?P<l2>[a-z])? ?(?P<l3>\(\d+\))?$")
-
-
 class SenseNumber:
-    def __init__(self, data: Tuple):
+    """
+    Sense Number: sn
+    https://dictionaryapi.com/products/json#sec-2.sn
+    Example: 2 a (3)
+    """
+
+    SN_FORMAT = re.compile(r"^(?P<l1>\d+)? ?(?P<l2>[a-z])? ?(?P<l3>\(\d+\))?$")
+
+    def __init__(self, data: Tuple[str, str]):
         assert data[0] == "sn", "Not an sn!"
 
-        matches = SN_FORMAT.fullmatch(data[1])
-        self.l1 = matches["l1"]
-        self.l2 = matches["l2"]
-        self.l3 = matches["l3"]
+        matches = self.SN_FORMAT.fullmatch(data[1])
+        l1: Optional[str] = matches["l1"] if matches is not None else None
+        l2: Optional[str] = matches["l2"] if matches is not None else None
+        l3: Optional[str] = matches["l3"] if matches is not None else None
+        self.sense_number = (l1, l2, l3)
         # TODO: what if there's l4, what if all are None?
 
     def __str__(self):
         # TODO: improve this
-        if self.l3 is not None:
-            return (
-                f"{self.l1 if self.l1 else ' '} {self.l2 if self.l2 else ' '} {self.l3}"
-            )
-        elif self.l2 is not None:
-            return f"{self.l1 if self.l1 else ' '} {self.l2}"
-        else:
-            return f"{self.l1}"
+        (l1, l2, l3) = self.sense_number
+        if l3 is not None:
+            return f"{l1 if l1 else ' '} {l2 if l2 else ' '} {l3}"
+        if l2 is not None:
+            return f"{l1 if l1 else ' '} {l2}"
+        return l1
 
 
-# Divided Sense: sdsense
-# https://dictionaryapi.com/products/json#sec-2.sdsense
 class DividedSense:
-    def __init__(self, data: Tuple):
+    """
+    Divided Sense: sdsense
+    https://dictionaryapi.com/products/json#sec-2.sdsense
+    """
+
+    def __init__(self, data: Tuple[str, Dict]):
         assert data[0] == "sdsense", "Not an sdsense node!"
 
         self.sense_divider = data[1]["sd"]
@@ -154,19 +174,22 @@ class DividedSense:
         )
 
 
-# Sense: sense
-# https://dictionaryapi.com/products/json#sec-2.sense
-# Data Model:
-#   object or array consisting of one dt (required) and zero
-#   or more et, ins, lbs, prs, sdsense, sgram, sls, sn, or vrs
 class Sense:
+    """
+    Sense: sense
+    https://dictionaryapi.com/products/json#sec-2.sense
+    Data Model:
+        object or array consisting of one dt (required) and zero
+        or more et, ins, lbs, prs, sdsense, sgram, sls, sn, or vrs
+    """
+
     # TODO: object or array???
-    def __init__(self, data):
+    def __init__(self, data: Any):
         # TODO: how to mandate dt?
         self.sn: Optional[SenseNumber] = None
         self.sdsense: Optional[DividedSense] = None
 
-        if type(data) is dict:
+        if isinstance(data, dict):
             # TODO: this is weird
             self.dt = DefiningText(("dt", data["dt"]))
 
@@ -177,8 +200,7 @@ class Sense:
                     self.sn = SenseNumber(elm)
                 if elm[0] == "sdsense":
                     self.sdsense = DividedSense(elm)
-
-        elif type(data) is list:
+        elif isinstance(data, list):
             raise RuntimeError("Not implemented!")
 
     def __str__(self):
@@ -196,12 +218,15 @@ class Sense:
             return definition
 
 
-# Etymology: et
-# https://dictionaryapi.com/products/json#sec-2.et
 class Etymology:
-    def __init__(self, data: Tuple):
+    """
+    Etymology: et
+    https://dictionaryapi.com/products/json#sec-2.et
+    """
+
+    def __init__(self, data: Tuple[str, List]):
         assert data[0] == "et", "Not an et node!"
-        assert type(data[1]) is List, "Malformed et node!"
+        assert isinstance(data[1], list), "Malformed et node!"
 
         # TODO: how to mandate self.text: str?
         # TODO: et_snote: Optional[str] = None
@@ -216,15 +241,18 @@ class Etymology:
         return self.text.__str__()
 
 
-# Truncated Sense: sen
-# https://dictionaryapi.com/products/json#sec-2.sen
 class TruncatedSense:
+    """
+    Truncated Sense: sen
+    https://dictionaryapi.com/products/json#sec-2.sen
+    """
+
     # TODO: object or array???
-    def __init__(self, data):
+    def __init__(self, data: Any):
         self.sn: Optional[SenseNumber] = None
         self.et: Optional[Etymology] = None
 
-        if type(data) is dict:
+        if isinstance(data, dict):
             # TODO: incomplete
             # at least one of the set et, ins, lbs, prs, sgram, sls, sn, vrs
             for elm in data.items():
@@ -232,7 +260,7 @@ class TruncatedSense:
                     self.sn = SenseNumber(elm)
                 if elm[0] == "et":
                     self.et = Etymology(elm)
-        elif type(data) is list:
+        elif isinstance(data, list):
             raise RuntimeError("Not implemented!")
 
     def __str__(self):
@@ -246,13 +274,16 @@ class TruncatedSense:
             raise RuntimeError("Not implemented!")
 
 
-# Binding Substitute: bs
-# https://dictionaryapi.com/products/json#sec-2.bs
 class BindingSubstitute:
+    """
+    Binding Substitute: bs
+    https://dictionaryapi.com/products/json#sec-2.bs
+    """
+
     def __init__(self, data: List):
         assert data[0] == "bs", "Not a bs node!"
         assert len(data) == 2, "Malformed bs node!"
-        assert type(data[1]) is dict, "Malformed bs node!"
+        assert isinstance(data[1], dict), "Malformed bs node!"
 
         self.sense = Sense(data[1]["sense"])
 
@@ -262,9 +293,12 @@ class BindingSubstitute:
         return self.sense.__str__()
 
 
-# Parenthesized Sense Sequence: pseq
-# https://dictionaryapi.com/products/json#sec-2.pseq
 class ParenthesizedSenseSequence:
+    """
+    Parenthesized Sense Sequence: pseq
+    https://dictionaryapi.com/products/json#sec-2.pseq
+    """
+
     def __init__(self, data: List):
         # NOTE: one or more sense elements and an optional bs element
         self.children: List = []
@@ -279,38 +313,44 @@ class ParenthesizedSenseSequence:
         return "\n".join([elm.__str__() for elm in self.children])
 
 
-# Sense Sequence: sseq
-# https://dictionaryapi.com/products/json#sec-2.sseq
 class SenseSequence:
-    def __init__(self, data: Tuple):
-        assert data[0] == "sseq", "Not an sseq node!"
-        assert type(data[1]) is list, "Malformed sseq node!"
+    """
+    Sense Sequence: sseq
+    https://dictionaryapi.com/products/json#sec-2.sseq
+    """
 
-        self.sseq: List[List] = []
+    def __init__(self, data: Tuple[str, List]):
+        assert data[0] == "sseq", "Not an sseq node!"
+        assert isinstance(data[1], list), "Malformed sseq node!"
+
+        self.sseq: List[List[Any]] = []
 
         # TODO: the structure of sseq is unclear
         for seq in data[1]:
-            r = []
+            senses: List[Any] = []
             for elm in seq:
                 if elm[0] == "sense":
-                    r.append(Sense(elm[1]))
+                    senses.append(Sense(elm[1]))
                 elif elm[0] == "sen":
-                    r.append(TruncatedSense(elm[1]))
+                    senses.append(TruncatedSense(elm[1]))
                 elif elm[0] == "pseq":
-                    r.append(ParenthesizedSenseSequence(elm[1]))
+                    senses.append(ParenthesizedSenseSequence(elm[1]))
                 elif elm[0] == "bs":
-                    r.append(BindingSubstitute(elm))
+                    senses.append(BindingSubstitute(elm))
                 # TODO: elif sdsense ...
-            self.sseq.append(r)
+            self.sseq.append(senses)
 
     def __str__(self):
         return "\n".join([elm.__str__() for seq in self.sseq for elm in seq])
 
 
-# Verb Divider: vd
-# https://dictionaryapi.com/products/json#sec-2.vd
 class VerbDivider:
-    def __init__(self, data):
+    """
+    Verb Divider: vd
+    https://dictionaryapi.com/products/json#sec-2.vd
+    """
+
+    def __init__(self, data: Tuple[str, str]):
         assert data[0] == "vd", "Not a vd node!"
         self.vd: str = data[1]
 
@@ -318,14 +358,17 @@ class VerbDivider:
         return click.style(self.vd, fg="blue", italic=True, underline=True)
 
 
-# Definition Section: def
-# https://dictionaryapi.com/products/json#sec-2.def
-# https://dictionaryapi.com/products/json#sec-2.sense-struct
 class DefinitionSection:
-    def __init__(self, data: List):
+    """
+    Definition Section: def
+    https://dictionaryapi.com/products/json#sec-2.def
+    https://dictionaryapi.com/products/json#sec-2.sense-struct
+    """
+
+    def __init__(self, data: List[Any]):
         # The definition section groups together all the sense sequences
         # and verb dividers for a headword or defined run-on phrase.
-        self.children = []
+        self.children: List[Any] = []
 
         for definition in data:
             for elm in definition.items():
@@ -342,7 +385,9 @@ class DefinitionSection:
 
 # TODO: an entry is very complex, here we only look at the interesting part
 class Entry:
-    def __init__(self, data: Dict):
+    """An entry in the MW dict API JSON response"""
+
+    def __init__(self, data: Dict[str, Any]):
         self.functional_label = data["fl"]
         self.definition = DefinitionSection(data["def"])
 
