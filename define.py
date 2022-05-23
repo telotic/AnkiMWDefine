@@ -1,3 +1,5 @@
+"""Print the definitions of a word by requesting Merriam-Webster dictionary API"""
+
 from typing import List
 import os.path
 import re
@@ -33,6 +35,38 @@ def query_mw(word: str) -> List:
     return response.json()
 
 
+def extract_audio_links(entry) -> List[str]:
+    """Extract audio links from an entry"""
+    links = []
+    if "prs" in entry["hwi"]:
+        prons = entry["hwi"]["prs"]
+        for pron in prons:
+            if "sound" in pron:
+                sound = pron["sound"]
+                audio = sound["audio"]
+                if audio.startswith("bix"):
+                    subdirectory = "bix"
+                elif audio.startswith("gg"):
+                    subdirectory = "gg"
+                elif audio[0].isdigit() or audio[0] == "_":
+                    subdirectory = "number"
+                else:
+                    subdirectory = audio[0]
+                links.append(
+                    "https://media.merriam-webster.com/"
+                    f"audio/prons/en/us/wav/{subdirectory}/{audio}.wav"
+                )
+    return links
+
+
+def is_head_word(word: str, entry) -> bool:
+    "Return whether this entry is a headword entry for `word`"
+    # https://dictionaryapi.com/products/json#sec-2.meta
+    # TODO: probably should use the hom or hwi field?
+    entry_id = entry["meta"]["id"]
+    return re.fullmatch(word + r"(:\d+)?", entry_id) is not None
+
+
 @click.command()
 @click.argument("word")
 def define(word: str) -> None:
@@ -41,14 +75,17 @@ def define(word: str) -> None:
     mw_result = query_mw(word)
     click.echo("")
     for entry in mw_result:
-        # https://dictionaryapi.com/products/json#sec-2.meta
         # NOTE: we only care about the headword entries
-        # TODO: probably should use the hom or hwi field?
-        entry_id = entry["meta"]["id"]
-        if re.fullmatch(word + r"(:\d+)?", entry_id) is not None:
+        if is_head_word(word, entry):
+            audio_links = extract_audio_links(entry)
+            if len(audio_links) > 0:
+                for audio_link in audio_links:
+                    click.echo(audio_link)
+                click.echo("")
             click.echo(Entry(entry))
     click.echo("")
 
 
 if __name__ == "__main__":
+    # pylint: disable=no-value-for-parameter
     define()

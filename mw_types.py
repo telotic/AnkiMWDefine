@@ -1,3 +1,5 @@
+"""Define how to parse and format components of a MW entry"""
+
 from typing import List, Dict, Optional, Tuple, Any
 import re
 import click
