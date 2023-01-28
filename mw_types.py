@@ -2,7 +2,6 @@
 
 from typing import List, Dict, Optional, Tuple, Any
 import re
-import click
 
 
 class RunningText:
@@ -43,7 +42,7 @@ class RunningText:
             elif elm[0] == "bc":
                 result += ": "
             elif elm[0] == "sx":
-                result += click.style(elm[1].upper(), fg="blue", underline=True)
+                result += f"<u style=\"color:LightSkyBlue;\">{elm[1].upper()}</u>"
             elif elm[0] == "dxt":
                 result += elm[1].split(":", maxsplit=1)[0]
             elif elm[0] in ["a_link", "d_link"]:
@@ -98,11 +97,10 @@ class VerbalIllustration:
             self.aq = AuthorQuotation(("aq", data["aq"]))
 
     def __str__(self):
-        line = click.style("// ", bold=True, fg="blue") + click.style(
-            self.text, italic=True, fg="blue"
-        )
+        line = ("<b style=\"color:LightSkyBlue;\">//</b> "
+                f"<em style=\"color:LightSkyBlue;\">{self.text}</em>")
         if self.aq is not None:
-            return line + click.style(" -- " + self.aq.__str__(), fg="magenta")
+            return f"<span style=\"color:magenta;\">{line} -- {self.aq}</span>"
         return line
 
 
@@ -122,7 +120,7 @@ class VerbalIllustrationSet:
             self.vis.append(VerbalIllustration(elm))
 
     def __str__(self):
-        return "\n".join([vi.__str__() for vi in self.vis])
+        return "\n<br>\n".join([vi.__str__() for vi in self.vis])
 
 
 class DefiningText:
@@ -146,7 +144,7 @@ class DefiningText:
 
     def __str__(self):
         if self.vis is not None:
-            return self.text.__str__() + "\n" + self.vis.__str__()
+            return self.text.__str__() + "\n<br>\n" + self.vis.__str__()
         else:
             return self.text.__str__()
 
@@ -170,7 +168,7 @@ class SenseNumber:
         self.sense_number = (l1, l2, l3)
         # TODO: what if there's l4, what if all are None?
 
-    def __str__(self):
+    def __to_str(self):
         # TODO: improve this
         (l1, l2, l3) = self.sense_number
         if l3 is not None:
@@ -178,6 +176,13 @@ class SenseNumber:
         if l2 is not None:
             return f"{l1 if l1 else ' '} {l2}"
         return l1
+
+    def width(self):
+        """Width of the sense number"""
+        return len(self.__to_str())
+
+    def __str__(self):
+        return self.__to_str().replace(" ", "&nbsp;")
 
 
 class DividedSense:
@@ -195,10 +200,7 @@ class DividedSense:
         # TODO: et, ins, lbs, prs, sgram, sls, vrs
 
     def __str__(self):
-        return (
-            click.style(self.sense_divider, italic=True)
-            + self.definition_text.__str__()
-        )
+        return f"<em>{self.sense_divider}</em>{self.definition_text}"
 
 
 class Sense:
@@ -237,10 +239,10 @@ class Sense:
 
         if self.sn is not None:
             # TODO: this is too hacky
-            indent = "\n" + " " * (len(self.sn.__str__()) + 1)
-            definition = re.sub(r"\n *", indent, definition)
+            indent = "\n<br>\n" + "&nbsp;" * (self.sn.width() + 1)
+            definition = re.sub(r"\n<br>\n *", indent, definition)
 
-            return click.style(self.sn, fg="red", bold=True) + " " + definition
+            return f"<b style=\"color:red;\">{self.sn}</b> {definition}"
         else:
             return definition
 
@@ -294,7 +296,7 @@ class TruncatedSense:
         if self.et is not None:
             text = "[ " + self.sn.__str__() + " ]"
             if self.sn is not None:
-                return click.style(self.sn, fg="red", bold=True) + " " + text
+                return f"<b style=\"color:red;\">{self.sn}</b> {text}"
             else:
                 return text
         else:
@@ -337,7 +339,7 @@ class ParenthesizedSenseSequence:
                 self.children.append(Sense(elm[1]))
 
     def __str__(self):
-        return "\n".join([elm.__str__() for elm in self.children])
+        return "\n<br>\n".join([elm.__str__() for elm in self.children])
 
 
 class SenseSequence:
@@ -368,7 +370,7 @@ class SenseSequence:
             self.sseq.append(senses)
 
     def __str__(self):
-        return "\n".join([elm.__str__() for seq in self.sseq for elm in seq])
+        return "\n<br>\n".join([elm.__str__() for seq in self.sseq for elm in seq])
 
 
 class VerbDivider:
@@ -382,7 +384,7 @@ class VerbDivider:
         self.vd: str = data[1]
 
     def __str__(self):
-        return click.style(self.vd, fg="blue", italic=True, underline=True)
+        return f"<em style=\"color:LightSkyBlue;\"><u>{self.vd}</u></em>"
 
 
 class DefinitionSection:
@@ -407,7 +409,7 @@ class DefinitionSection:
                 # https://dictionaryapi.com/products/json#sec-2.sls
 
     def __str__(self):
-        return "\n".join([elm.__str__() for elm in self.children])
+        return "\n<br>\n".join([elm.__str__() for elm in self.children])
 
 
 # TODO: an entry is very complex, here we only look at the interesting part
@@ -419,8 +421,6 @@ class Entry:
         self.definition = DefinitionSection(data["def"])
 
     def __str__(self):
-        return (
-            click.style(self.functional_label, fg="green", bold=True)
-            + "\n"
-            + self.definition.__str__()
-        )
+        return (f"<b style=\"color:green;\">{self.functional_label}</b>"
+                "\n<br>\n"
+                f"{self.definition}")
